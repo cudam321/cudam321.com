@@ -80,7 +80,7 @@
       var P = makeParticles(opts.seed || 7, opts.particles || (sm ? 16000 : 42000), sm ? 6000 : 16000);
       var n_ramp = RAMP.length - 1;
       var SS = 3;                                           // supersample for the accumulation buffer
-      var cols, rows, BW, BH, cw, ch, ctx, dpr, Rb, Gb, Bb, glow, ax, ay, bx, by, raf = 0, last = 0, acc = 0;
+      var cols, rows, BW, BH, cw, ch, ctx, dpr, Rb, Gb, Bb, glow, gas, gag, gab, ax, ay, bx, by, cssW, cssH, offX, offY, raf = 0, last = 0, acc = 0;
       var yaw = 0.4, pitch = coarse ? (30 * Math.PI / 180) : INCL, yawVel = 0, pitchVel = 0, dragging = false;   // orbit camera; mobile starts a touch more face-on
       var autoSpin = 6.2831853 / secPerRot;                                         // ambient rotation the inertia settles back into (gated live by reduce() in step)
       var onFrame = opts.onFrame || null, onInteract = opts.onInteract || null, interacted = false;
@@ -89,16 +89,19 @@
       function build() {
         // offsetWidth/Height are transform-immune — the reveal CSS-scales #galaxy-wrap, so getBoundingClientRect would inflate the buffer (the old "earth" bug)
         var W = Math.max(1, canvas.offsetWidth | 0), H = Math.max(1, (canvas.offsetHeight || canvas.offsetWidth) | 0);
+        cssW = W; cssH = H;
         dpr = Math.min(window.devicePixelRatio || 1, 2);
         canvas.width = W * dpr; canvas.height = H * dpr;
         ctx = canvas.getContext('2d', { alpha: coarse });   // mobile: transparent so the void shows the nebula glow + starfield, not a black box
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         ctx.textBaseline = 'top'; ctx.font = fontSize + 'px ui-monospace,"SF Mono",Menlo,Consolas,monospace';
         cw = ctx.measureText('M').width || fontSize * 0.6; ch = Math.round(fontSize * 1.12);
-        cols = Math.max(40, Math.min(opts.maxCols || (sm ? 110 : 240), Math.round(W / cw)));
+        cols = Math.max(40, Math.min(opts.maxCols || (sm ? 110 : 460), Math.round(W / cw)));   // 460 fills wide desktops (was 240 → unpainted band on anything >~1584px)
         rows = Math.max(20, Math.round(H / ch));
+        offX = Math.round((W - cols * cw) / 2); offY = Math.round((H - rows * ch) / 2);          // center the grid: fills the viewport, stays centered if capped on a huge screen
         BW = cols * SS; BH = rows * SS;
         Rb = new Float32Array(BW * BH); Gb = new Float32Array(BW * BH); Bb = new Float32Array(BW * BH);
+        gas = new Float32Array(BW * BH); gag = new Float32Array(BW * BH); gab = new Float32Array(BW * BH);   // persistent blur scratch (no per-frame allocation)
         glow = new Float32Array(BW * BH);
         // particle→buffer mapping. desktop: stretch to fill the box (legacy). mobile: uniform scale so the disk stays ROUND and fills the screen.
         if (coarse) {
@@ -126,12 +129,12 @@
           if (sx < 0 || sx >= BW || sy < 0 || sy >= BH) continue;
           var idx = sy * BW + sx; Rb[idx] += CR[i] * be; Gb[idx] += CG[i] * be; Bb[idx] += CB[i] * be;
         }
-        var gas = new Float32Array(Rb), gag = new Float32Array(Gb), gab = new Float32Array(Bb);
+        gas.set(Rb); gag.set(Gb); gab.set(Bb);
         boxblur(gas, BW, BH, 2); boxblur(gag, BW, BH, 2); boxblur(gab, BW, BH, 2);
         // tone: gas*0.8 + points, + golden core glow, asinh stretch, saturate  (gains tuned for this buffer)
         var GAIN = 4.2, ash = Math.asinh(13);
-        if (coarse) ctx.clearRect(0, 0, cols * cw, rows * ch);   // transparent void (mobile)
-        else { ctx.fillStyle = bg; ctx.fillRect(0, 0, cols * cw, rows * ch); }
+        if (coarse) ctx.clearRect(0, 0, cssW, cssH);   // transparent void (mobile)
+        else { ctx.fillStyle = bg; ctx.fillRect(0, 0, cssW, cssH); }   // fill the FULL canvas — wide screens never show an unpainted band
         for (var ry = 0; ry < rows; ry++) {
           for (var cx = 0; cx < cols; cx++) {
             // average the SSxSS block
@@ -151,7 +154,7 @@
             var chi = (Math.pow(Math.min(1, lum), 0.85) * n_ramp) | 0;
             var c = RAMP[chi]; if (c === ' ') continue;
             ctx.fillStyle = 'rgb(' + (r * 255 | 0) + ',' + (gg * 255 | 0) + ',' + (b * 255 | 0) + ')';
-            ctx.fillText(c, cx * cw, ry * ch);
+            ctx.fillText(c, offX + cx * cw, offY + ry * ch);
           }
         }
         if (spot && mpx >= 0) {                             // cursor-dim spotlight
@@ -159,11 +162,11 @@
           if (rect.width && rect.height) {
             var fx = (mpx - rect.left) / rect.width, fy = (mpy - rect.top) / rect.height;  // normalize 0..1
             if (fx >= -0.05 && fx <= 1.05 && fy >= -0.05 && fy <= 1.05) {
-              var lx = fx * cols * cw, ly = fy * rows * ch;  // → canvas internal coords (scale/dpr-proof)
-              var R = Math.min(cols * cw, rows * ch) * 0.20;
+              var lx = fx * cssW, ly = fy * cssH;            // cursor in full-canvas coords
+              var R = Math.min(cssW, cssH) * 0.20;
               var grd = ctx.createRadialGradient(lx, ly, 0, lx, ly, R);
               grd.addColorStop(0, 'rgba(5,7,13,0.82)'); grd.addColorStop(1, 'rgba(5,7,13,0)');
-              ctx.fillStyle = grd; ctx.fillRect(0, 0, cols * cw, rows * ch);
+              ctx.fillStyle = grd; ctx.fillRect(0, 0, cssW, cssH);
             }
           }
         }
@@ -175,7 +178,8 @@
         var cA = Math.cos(yaw), sA = Math.sin(yaw), ci = Math.cos(pitch), si = Math.sin(pitch);
         var xr = x * cA - y * sA, yr = x * sA + y * cA;
         var y2 = yr * ci - z * si, z2 = yr * si + z * ci;
-        return { x: (xr / SPAN) + 0.5, y: (y2 / SPAN) + 0.5, depth: z2, face: Math.abs(ci) };   // face: 1=flat-on, 0=edge-on
+        var fx = (xr / SPAN) + 0.5, fy = (y2 / SPAN) + 0.5;
+        return { x: (offX + fx * cols * cw) / cssW, y: (offY + fy * rows * ch) / cssH, depth: z2, face: Math.abs(ci) };   // canvas fraction (matches the centered grid); face: 1=flat-on, 0=edge-on
       }
 
       function step(dt) {
