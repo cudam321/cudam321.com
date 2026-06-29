@@ -27,4 +27,10 @@ It's static — serve the folder with anything:
 npx serve .
 ```
 
+## License
+
+The **source code** in this repository is released under the [MIT License](LICENSE) — borrow the engines, the markup, the techniques, whatever's useful.
+
+Everything that makes this *mine*, though, is **not** licensed for reuse and stays © 2026 Cudam: the written copy, the photographs and image assets, the ASCII art, and the `cudam321` name and branding. In short — take the code, not the identity.
+
 — Cudam ([@cudam321](https://github.com/cudam321))
