@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://cudam321.com/sitemap.xml
