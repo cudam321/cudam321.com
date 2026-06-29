@@ -507,7 +507,7 @@
     if (c === 'home') { goHero(); printLine('→ hero', 'out'); return; }
     if (c === 'cd' || c === 'goto' || c === 'open' || c === 'go') { var key = (arg || '').toLowerCase().replace(/^[~/]+/, ''); var id = ROOMS[key]; if (id === '__home') { goHero(); printLine('→ home', 'out'); } else if (id && openSection(id)) { printLine('→ ' + id, 'out'); } else printLine("no such system: '" + arg + "'. try 'ls'.", 'warn'); return; }
     if (ROOMS[c]) { if (ROOMS[c] === '__home') { goHero(); } else openSection(ROOMS[c]); printLine('→ ' + c, 'out'); return; }
-    if (c === 'whoami') { printLine("Tuan Hoang — cudam321. markets crypto & AI, then builds it. native VI, fluent EN + JP.", 'out'); return; }
+    if (c === 'whoami') { printLine("Cudam — @cudam321. markets crypto & AI, then builds it. native VI, fluent EN + JP.", 'out'); return; }
     if (c === 'lang') { var l = (arg || '').toLowerCase(); if (l === 'vi' || l === 'en' || l === 'jp' || l === 'ja') { setLang(l === 'ja' ? 'jp' : l); } else printLine("usage: lang vi|en|jp", 'warn'); return; }
     if (c === 'top' || c === 'htop') { printLine("PID  PROCESS            %\n  1  shipping           99\n  2  community_mgmt     71\n 12  agents_running     ●●●●●●●●●●●●\n  0  imposter_syndrome   0  (patched)", 'out'); return; }
     if (c === 'sudo') { if (/hire-?me/.test(arg)) { printLine("[sudo] you don’t have to ask. → opening basecamp.", 'sys'); setTimeout(function () { openSection('basecamp'); }, 350); } else if (/rm.*doubts/.test(arg)) { printLine("doubts removed. permanently.", 'out'); } else { printLine("we don’t do permissions here. (try: sudo hire-me)", 'out'); } return; }

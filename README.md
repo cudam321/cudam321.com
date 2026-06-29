@@ -27,4 +27,4 @@ It's static — serve the folder with anything:
 npx serve .
 ```
 
-— Tuan Hoang ([@cudam321](https://github.com/cudam321))
+— Cudam ([@cudam321](https://github.com/cudam321))
