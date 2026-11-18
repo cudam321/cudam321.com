@@ -36,9 +36,9 @@
     basecamp:'basecamp', contact:'basecamp', hello:'basecamp', hi:'basecamp'
   };
   var TAGLINES = {
-    en: 'I’m the marketing team, the dev team, and the stand-up meeting.',
-    vi: 'Tôi là team marketing, team dev, kiêm luôn buổi họp stand-up.',
-    jp: 'マーケチームも、開発チームも、朝会も、ぜんぶ自分。'
+    en: 'GTM, Product and creative.',
+    vi: 'GTM, Sản phẩm và sáng tạo.',
+    jp: 'GTM、プロダクト、クリエイティブ。'
   };
   var LANG_CONF = {
     vi: 'language set to Tiếng Việt. (yes, I actually speak it.)',
@@ -51,7 +51,7 @@
   // data-art slugs that have a real image in images/art/ — others keep their placeholder
   var ART_HAVE = {
     'logo-trisolaris': 1, 'logo-near': 1, 'logo-dapdap': 1, 'logo-beratown': 1,
-    'logo-giac': 1, 'logo-amige': 1,
+    'logo-giac': 1, 'logo-amige': 1, 'logo-unrlzd': 1,
     'album-westcoast': 1, 'album-iwonder': 1, 'album-sweet': 1,
     'album-runaway': 1, 'album-ghosttown': 1, 'album-afterthought': 1, 'album-alot': 1, 'album-afterthestorm': 1, 'album-sunshine': 1,
     'scene-scott-pilgrim': 1, 'scene-swiss-army-man': 1, 'scene-interstellar': 1,
@@ -85,7 +85,8 @@
     { label: "DapDap '24", reach: 30, color: [172, 146, 235], seed: 6, logo: 'dapdap' },
     { label: "Beratown '24", reach: 230, color: [232, 182, 110], seed: 7, logo: 'beratown' },
     { label: "NADSA '25", reach: 390, color: [160, 158, 222], seed: 8, logo: 'nadsa', logoScale: 1.5 },
-    { label: "BLOND:ISH '26", reach: 0, size: 13, live: true, color: [242, 172, 150], seed: 9, mono: 'NRG' }
+    { label: "BLOND:ISH '26", reach: 0, size: 13, live: true, color: [242, 172, 150], seed: 9, mono: 'NRG' },
+    { label: "Bullet '26", reach: 0, size: 13, live: true, color: [200, 232, 104], seed: 10, logo: 'bullet', logoScale: 1.3 }
   ];
   var scrollQ = false;
   var toastEl = null, tt = 0, gt = 0;
@@ -188,7 +189,7 @@
   // THE TRAJECTORY: reflect the docked system into the live HUD + dossier + reach + progress dots
   function rcpOnDock(i, score, warping) {
     var sc = $('traj-score'); if (sc && score != null) sc.textContent = score;
-    var sec = $('traj-sector'); if (sec) sec.textContent = ('0' + (i + 1)).slice(-2) + ' / 09';
+    var sec = $('traj-sector'); if (sec) sec.textContent = ('0' + (i + 1)).slice(-2) + ' / ' + ('0' + RCP_SYS.length).slice(-2);
     var loc = $('traj-loc'), sys = RCP_SYS[i]; if (loc && sys) loc.textContent = sys.label.toUpperCase();
     var info = document.querySelector('#rcp2-data .sys-info[data-i="' + i + '"]'), dos = $('traj-dossier');
     if (info && dos) dos.innerHTML = info.innerHTML;
