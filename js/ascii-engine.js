@@ -116,14 +116,14 @@
   }
 
   function lifecycle(canvas, onVisible, onHidden) {
-    var io = null;
+    var io = null, seen = true;   // seen: the observer's last verdict (stays true where IntersectionObserver is missing)
     if ('IntersectionObserver' in window) {
       io = new IntersectionObserver(function (es) {
-        es.forEach(function (e) { e.isIntersecting ? onVisible() : onHidden(); });
+        es.forEach(function (e) { seen = e.isIntersecting; seen ? onVisible() : onHidden(); });
       }, { threshold: 0.01 });
       io.observe(canvas);
     }
-    function vis() { document.hidden ? onHidden() : onVisible(); }
+    function vis() { (document.hidden || !seen) ? onHidden() : onVisible(); }   // returning to the tab must not restart art inside a closed section
     document.addEventListener('visibilitychange', vis);
     return function () { if (io) io.disconnect(); document.removeEventListener('visibilitychange', vis); };
   }
@@ -143,6 +143,7 @@
       var bg = transparent ? null : (opts.background || '#05070D');
       var TW = 512, TH = 256;
       var raf = 0, running = false, theta = 0, last = 0, acc = 0, destroyed = false;
+      var paused = false, onScreen = true, startFn = null, stopFn = null;   // host pause (setActive) wins over the visibility callbacks below
       var teardown = function () {};
 
       loadImage(opts.textureSrc || '/images/earth_eq.jpg', function (err, img) {
@@ -213,7 +214,8 @@
 
         var render = build();
         function loop(now) {
-          if (destroyed) return;
+          raf = 0;
+          if (destroyed || !running) return;   // a stopped loop ends itself (never leaves a second chain alive)
           var dt = (now - last) / 1000; last = now;
           if (dt > 0.25) dt = 0.25;
           acc += dt;
@@ -223,8 +225,9 @@
           }
           raf = requestAnimationFrame(loop);
         }
-        function start() { if (running || destroyed) return; running = true; last = performance.now(); acc = 0; raf = requestAnimationFrame(loop); }
+        function start() { if (running || destroyed || paused) return; running = true; last = performance.now(); acc = 0; if (raf) cancelAnimationFrame(raf); raf = requestAnimationFrame(loop); }   // one chain only: callers do `running = false; start()` to restart
         function stop() { running = false; if (raf) cancelAnimationFrame(raf); raf = 0; }
+        startFn = start; stopFn = stop;
         function revive() { if (destroyed) return; render = build(); if (reduceMotion()) render(0.6); else { running = false; start(); } }
         // a backgrounded canvas can have its 2D backing store discarded (shows blank/broken); rebuild + repaint on restore/return
         canvas.addEventListener('contextlost', function (e) { e.preventDefault(); stop(); }, false);
@@ -233,7 +236,7 @@
         if (reduceMotion()) { render(0.6); }
         else { start(); }
 
-        var off = lifecycle(canvas, function () { if (reduceMotion()) render(theta); else { running = false; start(); } }, stop);
+        var off = lifecycle(canvas, function () { onScreen = true; if (reduceMotion()) render(theta); else { running = false; start(); } }, function () { onScreen = false; stop(); });
         var ro = ('ResizeObserver' in window) ? new ResizeObserver(function () {
           render = build(); if (!running && reduceMotion()) render(0.6);
         }) : null;
@@ -241,7 +244,15 @@
         teardown = function () { stop(); off(); if (ro) ro.disconnect(); };
       });
 
-      return { destroy: function () { destroyed = true; teardown(); } };
+      return {
+        destroy: function () { destroyed = true; teardown(); },
+        // pause/resume rendering while the globe is fully hidden (opacity 0 or covered); rotation simply continues from where it stopped
+        setActive: function (b) {
+          paused = !b;
+          if (paused) { if (stopFn) stopFn(); }
+          else if (startFn && onScreen && !document.hidden && !reduceMotion()) startFn();
+        }
+      };
     },
 
     /* static dense ASCII from any image (colored or mono) */

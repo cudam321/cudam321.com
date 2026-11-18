@@ -72,6 +72,7 @@
   var history_ = [], hi_ = -1;
   var sceneHandles = [];
   var gx = null;              // Galaxy handle
+  var heroGlobe = null;       // hero ASCII Earth handle (pausable)
   var COARSE = !!(window.matchMedia && matchMedia('(pointer: coarse)').matches);   // touch device
   var sbg = null;             // SpaceBG (per-section animated background) handle
   var cinePlayer = null;      // Movies ASCII player handle
@@ -91,8 +92,8 @@
   var scrollQ = false;
   var toastEl = null, tt = 0, gt = 0;
   // wormhole shared flags (read by its draw loop)
-  var wormActive = false, wormWarp = 1, wormDestroyed = false, wormBuild = null;
-  var sfRaf = 0, sfMake = null, clockT = 0, bootT = 0, bootEnded = false;
+  var wormActive = false, wormWarp = 1, wormDestroyed = false, wormBuild = null, wormKick = null;
+  var sfRaf = 0, sfMake = null, sfOn = true, sfKick = null, clockT = 0, bootT = 0, bootEnded = false;
 
   function reduce() {
     return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -128,11 +129,12 @@
   function mountHero() {
     if (!E.globe) return;
     var sm = window.innerWidth < 760;
-    window.AsciiArt.globe(E.globe, {
+    heroGlobe = window.AsciiArt.globe(E.globe, {
       textureSrc: 'images/earth_eq.jpg', color: true, monoColor: '#bcd0e6',
       fontSize: sm ? 9 : 11, maxCols: sm ? 96 : 180, secondsPerRotation: 30,
       gamma: 0.82, transparent: true
     });
+    applyScroll();   // apply the hidden-layer gating to the fresh handle
     if (E.face) window.AsciiArt.image(E.face, { src: 'images/face.jpg', color: true, fontSize: sm ? 7 : 9, maxCols: sm ? 120 : 210, gamma: 0.82, transparent: true });
   }
   function mountSectionArt(sec) {
@@ -285,9 +287,10 @@
     build();
     var raf = 0, last = 0;
     function draw(now) {
+      raf = 0;
       if (wormDestroyed) return;
       var dt = (now - last) / 1000; last = now; if (!(dt > 0) || dt > 0.05) dt = 0.016;
-      if (!wormActive) { raf = requestAnimationFrame(draw); return; }
+      if (!wormActive) return;   // off screen: stop ticking; applyScroll() kicks the loop when it comes back
       ctx.fillStyle = '#04060B'; ctx.fillRect(0, 0, W, H);
       var warp = wormWarp || 1, baseR = Math.min(W, H) * 0.058;
       for (var k = 0; k < pts.length; k++) {
@@ -302,7 +305,8 @@
       }
       ctx.globalAlpha = 1; raf = requestAnimationFrame(draw);
     }
-    last = performance.now(); raf = requestAnimationFrame(draw);
+    wormKick = function () { if (!raf && !wormDestroyed) { last = performance.now(); raf = requestAnimationFrame(draw); } };
+    wormKick();
     if ('ResizeObserver' in window) { var ro = new ResizeObserver(function () { build(); }); ro.observe(c); }
     wormBuild = build;
   }
@@ -313,6 +317,7 @@
     var max = Math.max(1, (document.documentElement.scrollHeight - window.innerHeight));
     var P = Math.min(1, Math.max(0, (window.scrollY || window.pageYOffset || 0) / max));
     P_ = P; var cl = function (x) { return x < 0 ? 0 : (x > 1 ? 1 : x); };
+    var open = state.section != null;   // an open section is an opaque full-screen layer (#overlay, z-index 80) over the whole stage
     var eIn = cl(P / 0.28), dx = (1 - eIn) * 22, baseScale = 0.82 + eIn * 0.42;
     var eThru = cl((P - 0.28) / 0.18), thru = 1 + eThru * eThru * 11, sc = baseScale * thru;
     var eOp = 1 - cl((P - 0.40) / 0.10);
@@ -321,7 +326,8 @@
     if (E.heroText) { E.heroText.style.opacity = (1 - cl(P / 0.18)).toFixed(3); E.heroText.style.pointerEvents = P > 0.04 ? 'none' : 'auto'; }
     var wOp = cl((P - 0.40) / 0.10) * (1 - cl((P - 0.72) / 0.08));
     if (E.worm) E.worm.style.opacity = wOp.toFixed(3);
-    wormActive = wOp > 0.02; wormWarp = 0.6 + 1.7 * cl((P - 0.40) / 0.30);
+    wormActive = wOp > 0.02 && !open; wormWarp = 0.6 + 1.7 * cl((P - 0.40) / 0.30);
+    if (wormActive && wormKick) wormKick();
     // FACE: zooms in as the dive completes, then dissolves into the wormhole
     if (E.faceWrap) {
       var fIn = cl((P - 0.42) / 0.07), fOut = cl((P - 0.50) / 0.10);
@@ -330,7 +336,10 @@
     }
     var gOp = cl((P - 0.70) / 0.18);
     if (E.galaxyWrap) { E.galaxyWrap.style.opacity = gOp.toFixed(3); E.galaxyWrap.style.transform = 'scale(' + (1.22 - gOp * 0.22).toFixed(3) + ')'; E.galaxyWrap.style.pointerEvents = gOp > 0.85 ? 'auto' : 'none'; E.galaxyWrap.inert = gOp <= 0.85; }
-    if (gx) { gx.setActive(gOp > 0.04); gx.setSpotlight(gOp > 0.82); }
+    // ---- don't render what nobody can see (single gate: every open/close/resize/scroll path ends here) ----
+    if (gx) { gx.setActive(!open && gOp > 0.04); gx.setSpotlight(gOp > 0.82); }
+    if (heroGlobe) heroGlobe.setActive(!open && eOp > 0);                 // the Earth is at opacity 0 past the dive
+    setStarfield(!open && !(gx && !COARSE && gOp >= 1));                  // desktop galaxy canvas is opaque: at full reveal it covers the starfield
   }
   function onScroll() { if (scrollQ) return; scrollQ = true; requestAnimationFrame(function () { scrollQ = false; applyScroll(); }); }
   function onMouse(e) {
@@ -353,17 +362,24 @@
     }
     make(); sfMake = make;
     function draw(t) {
+      sfRaf = 0;
+      var red = reduce();
       ctx.clearRect(0, 0, W, H);
       for (var i = 0; i < stars.length; i++) {
         var s = stars[i];
-        var a = reduce() ? (0.32 + s.z * 0.5) : (0.26 + 0.52 * (0.5 + 0.5 * Math.sin(t * 0.001 * s.sp + s.tw))) * (0.42 + s.z * 0.6);
+        var a = red ? (0.32 + s.z * 0.5) : (0.26 + 0.52 * (0.5 + 0.5 * Math.sin(t * 0.001 * s.sp + s.tw))) * (0.42 + s.z * 0.6);
         ctx.globalAlpha = Math.min(1, a);
         ctx.fillStyle = s.z > 0.86 ? '#cfe0f5' : (s.z > 0.52 ? '#9fb0c8' : '#646f84');
         var sz = s.r * (s.z > 0.86 ? 1.7 : 1); ctx.fillRect(s.x, s.y, sz, sz);
       }
-      ctx.globalAlpha = 1; if (!reduce()) sfRaf = requestAnimationFrame(draw);
+      ctx.globalAlpha = 1; if (!red && sfOn) sfRaf = requestAnimationFrame(draw);
     }
+    sfKick = function () { if (!sfRaf && sfOn && !reduce()) draw(performance.now()); };   // resume: paint this frame, then keep looping
     if (reduce()) draw(0); else sfRaf = requestAnimationFrame(draw);
+  }
+  function setStarfield(on) {
+    if (on === sfOn) return; sfOn = on;
+    if (on) { if (sfKick) sfKick(); } else if (sfRaf) { cancelAnimationFrame(sfRaf); sfRaf = 0; }
   }
   function onResize() { if (sfMake) sfMake(); if (wormBuild) wormBuild(); applyScroll(); }
 
@@ -441,6 +457,7 @@
     var obg = E.overlay && E.overlay.querySelector('.overlay-bg'); if (obg) obg.style.display = hideBg ? 'none' : '';
     if (cinePlayer) cinePlayer.setActive(id === 'cinema');
     if (rcpGame) rcpGame.setActive(id === 'receipts');
+    applyScroll();   // the section now covers the stage: pause the layers underneath
     return true;
   }
   function closeSection() {

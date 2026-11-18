@@ -61,10 +61,31 @@
     return { X: X, Y: Y, Z: Z, CR: CR, CG: CG, CB: CB, BRI: BRI, N: N };
   }
 
-  function boxblur(buf, W, H, rad) {                        // separable, in-place-ish
-    var tmp = new Float32Array(W * H), x, y, k, s, n = 2 * rad + 1;
-    for (y = 0; y < H; y++) { var row = y * W; for (x = 0; x < W; x++) { s = 0; for (k = -rad; k <= rad; k++) { var xx = x + k; if (xx < 0) xx = 0; else if (xx >= W) xx = W - 1; s += buf[row + xx]; } tmp[row + x] = s / n; } }
-    for (x = 0; x < W; x++) { for (y = 0; y < H; y++) { s = 0; for (k = -rad; k <= rad; k++) { var yy = y + k; if (yy < 0) yy = 0; else if (yy >= H) yy = H - 1; s += tmp[yy * W + x]; } buf[y * W + x] = s / n; } }
+  var blurTmp = null;                                       // one persistent scratch buffer (was a fresh W*H Float32Array per call, 3x per frame)
+  function boxblur(buf, W, H, rad) {                        // separable box blur. Same taps added in the same order as before -> bit-identical output
+    var N = W * H, x, y, k, s, n = 2 * rad + 1, row;
+    if (!blurTmp || blurTmp.length !== N) blurTmp = new Float32Array(N);
+    var tmp = blurTmp;
+    if (rad !== 2 || W < 5) {                               // generic path (unused today: every call is rad 2)
+      for (y = 0; y < H; y++) { row = y * W; for (x = 0; x < W; x++) { s = 0; for (k = -rad; k <= rad; k++) { var xx = x + k; if (xx < 0) xx = 0; else if (xx >= W) xx = W - 1; s += buf[row + xx]; } tmp[row + x] = s / n; } }
+      for (x = 0; x < W; x++) { for (y = 0; y < H; y++) { s = 0; for (k = -rad; k <= rad; k++) { var yy = y + k; if (yy < 0) yy = 0; else if (yy >= H) yy = H - 1; s += tmp[yy * W + x]; } buf[y * W + x] = s / n; } }
+      return;
+    }
+    for (y = 0; y < H; y++) {                               // horizontal 5-tap, edges clamped
+      row = y * W;
+      var a0 = buf[row], a1 = buf[row + 1], a2 = buf[row + 2], a3 = buf[row + 3];
+      tmp[row] = (a0 + a0 + a0 + a1 + a2) / 5;
+      tmp[row + 1] = (a0 + a0 + a1 + a2 + a3) / 5;
+      var end = row + W - 2;
+      for (k = row + 2; k < end; k++) tmp[k] = (buf[k - 2] + buf[k - 1] + buf[k] + buf[k + 1] + buf[k + 2]) / 5;
+      var z0 = buf[end - 2], z1 = buf[end - 1], z2 = buf[end], z3 = buf[end + 1];
+      tmp[end] = (z0 + z1 + z2 + z3 + z3) / 5;
+      tmp[end + 1] = (z1 + z2 + z3 + z3 + z3) / 5;
+    }
+    for (y = 0; y < H; y++) {                               // vertical 5-tap, row by row (cache-friendly), edges clamped
+      var r0 = (y < 2 ? 0 : y - 2) * W, r1 = (y < 1 ? 0 : y - 1) * W, r2 = y * W, r3 = (y + 1 >= H ? H - 1 : y + 1) * W, r4 = (y + 2 >= H ? H - 1 : y + 2) * W;
+      for (x = 0; x < W; x++) buf[r2 + x] = (tmp[r0 + x] + tmp[r1 + x] + tmp[r2 + x] + tmp[r3 + x] + tmp[r4 + x]) / 5;
+    }
   }
 
   var Galaxy = {
@@ -133,6 +154,7 @@
         boxblur(gas, BW, BH, 2); boxblur(gag, BW, BH, 2); boxblur(gab, BW, BH, 2);
         // tone: gas*0.8 + points, + golden core glow, asinh stretch, saturate  (gains tuned for this buffer)
         var GAIN = 4.2, ash = Math.asinh(13);
+        var VOID = Math.sinh(0.069 * ash) / 13;   // channels all below this stretch to < 0.069 each, so L < 0.07: the cell is skipped anyway (saves 3 asinh per empty cell)
         if (coarse) ctx.clearRect(0, 0, cssW, cssH);   // transparent void (mobile)
         else { ctx.fillStyle = bg; ctx.fillRect(0, 0, cssW, cssH); }   // fill the FULL canvas — wide screens never show an unpainted band
         for (var ry = 0; ry < rows; ry++) {
@@ -145,6 +167,7 @@
             }
             var inv = 1 / (SS * SS);
             r = r * inv * GAIN + gl * inv * 1.0; gg = gg * inv * GAIN + gl * inv * 0.85; b = b * inv * GAIN + gl * inv * 0.58;
+            if (r < VOID && gg < VOID && b < VOID) continue;   // empty space: same outcome as the L < 0.07 test below
             // asinh stretch
             r = Math.asinh(r * 13) / ash; gg = Math.asinh(gg * 13) / ash; b = Math.asinh(b * 13) / ash;
             var L = (r + gg + b) / 3;

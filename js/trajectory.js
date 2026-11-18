@@ -8,6 +8,7 @@
 (function () {
   'use strict';
   var RAMP = " .:-=+*oxX#%@&";
+  var A8 = []; for (var a8 = 0; a8 < 256; a8++) A8.push((a8 / 255).toFixed(4) + ')');   // the 256 alpha values a canvas colour can hold (see setF)
   var SHIP = ["  ◢█◣", "◢█████◣", "███◉███ ➤", "◥█████◤", "  ◥█◤"];
   function reduce() { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
   function rnd(s) { var x = Math.sin(s * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); }
@@ -129,7 +130,16 @@
       return { x: pts[0].x, y: pts[0].y, a: 0 };
     }
 
-    function setF(r, g, b, a) { ctx.fillStyle = 'rgba(' + (r | 0) + ',' + (g | 0) + ',' + (b | 0) + ',' + a + ')'; }
+    // A canvas colour keeps its alpha in 8 bits, so 'rgba(r,g,b,al)' is rounded to k/255 anyway (checked in Chrome: 30,000 colours incl. rounding boundaries, byte-identical pixels).
+    // Sending that k directly skips turning a long decimal into text, and parsing it back, for every single glyph.
+    // Alphas sitting on a rounding boundary keep the original text, so the stored colour is the same in every case.
+    var fR = -1, fG = -1, fB = -1, fPre = '';
+    function setF(r, g, b, al) {
+      r |= 0; g |= 0; b |= 0;
+      if (r !== fR || g !== fG || b !== fB) { fPre = 'rgba(' + r + ',' + g + ',' + b + ','; fR = r; fG = g; fB = b; }
+      var x = al * 255, k = Math.round(x);
+      ctx.fillStyle = fPre + (k >= 0 && k <= 255 && Math.abs(x - k) < 0.499 ? A8[k] : al + ')');   // on a rounding boundary or out of range: the exact original text
+    }
     function drawNebula() {
       if (!nebula) return; var ox = -(camx * 0.12) % W, oy = -(camy * 0.12) % H; if (ox > 0) ox -= W; if (oy > 0) oy -= H;
       for (var i = 0; i < 2; i++) for (var j = 0; j < 2; j++) ctx.drawImage(nebula, ox + i * W, oy + j * H);

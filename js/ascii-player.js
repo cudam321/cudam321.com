@@ -20,11 +20,12 @@
     var W = 1, H = 1, cw = 6, ch = 10, cols = 10, rows = 10, n = RAMP.length - 1;
     var grids = [], ready = false, cur = 0, nextI = 0, mode = 'hold';
     var clock = 0, ph = null, last = 0, raf = 0, active = false, hidden = !!document.hidden, destroyed = false, acc = 0, FPS = 30;
+    var held = false;   // true once the current 'hold' poster is on the canvas (cleared by anything that wipes or changes it)
 
     function fit() {
       var box = canvas.getBoundingClientRect();
       W = Math.max(1, Math.round(box.width)); H = Math.max(1, Math.round(box.height || box.width * 0.75));
-      canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+      canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr); held = false;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.font = fontSize + 'px ui-monospace, "SF Mono", Menlo, monospace';
       ctx.textBaseline = 'top';
@@ -82,7 +83,7 @@
         }
       }
     }
-    function render() { if (!ready) return; if (mode === 'hold') drawGrid(grids[cur]); else drawMorph(clock / morphMs); }
+    function render() { if (!ready) return; if (mode === 'hold') { drawGrid(grids[cur]); held = true; } else { held = false; drawMorph(clock / morphMs); } }
 
     function startMorph(to) {
       if (!ready || frames.length < 2) return;
@@ -95,6 +96,7 @@
       clock += dt;
       if (mode === 'hold') { if (clock >= dwell && frames.length > 1 && active) startMorph(cur + 1); }
       else if (clock >= morphMs) { cur = nextI; mode = 'hold'; clock = 0; }
+      if (mode === 'hold' && held) return;   // the poster is already drawn and nothing changed: skip the identical repaint
       render();
     }
     function loop(now) {
